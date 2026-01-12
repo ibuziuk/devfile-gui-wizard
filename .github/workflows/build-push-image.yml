@@ -53,14 +53,22 @@ jobs:
 
       - name: Build container image
         run: |
-          # Build with all tags (tags are newline-separated)
+          # Build with all tags
           TAGS="${{ steps.meta.outputs.tags }}"
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           
           # Collect all tag arguments
           TAG_ARGS=""
           while IFS= read -r tag; do
             if [ -n "$tag" ]; then
-              TAG_ARGS="$TAG_ARGS --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag"
+              # Check if tag already contains full image reference (contains : or /)
+              if [[ "$tag" == *":"* ]] || [[ "$tag" == *"/"* ]]; then
+                # Tag is already a full image reference, use as-is
+                TAG_ARGS="$TAG_ARGS --tag ${tag}"
+              else
+                # Tag is just the tag part, prepend image base
+                TAG_ARGS="$TAG_ARGS --tag ${IMAGE_BASE}:${tag}"
+              fi
             fi
           done <<< "$TAGS"
           
@@ -70,10 +78,18 @@ jobs:
       - name: Push container image
         if: github.event_name != 'pull_request'
         run: |
-          # Push all tags (tags are newline-separated)
+          # Push all tags
           TAGS="${{ steps.meta.outputs.tags }}"
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           while IFS= read -r tag; do
             if [ -n "$tag" ]; then
-              podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag
+              # Check if tag already contains full image reference (contains : or /)
+              if [[ "$tag" == *":"* ]] || [[ "$tag" == *"/"* ]]; then
+                # Tag is already a full image reference, use as-is
+                podman push "${tag}"
+              else
+                # Tag is just the tag part, prepend image base
+                podman push "${IMAGE_BASE}:${tag}"
+              fi
             fi
           done <<< "$TAGS"
