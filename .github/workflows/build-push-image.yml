@@ -53,22 +53,15 @@ jobs:
 
       - name: Build container image
         run: |
-          # Build with all tags
+          # Build with all tags (tags from metadata action are already full image references)
           TAGS="${{ steps.meta.outputs.tags }}"
-          IMAGE_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           
           # Collect all tag arguments
           TAG_ARGS=""
           while IFS= read -r tag; do
             if [ -n "$tag" ]; then
-              # Check if tag already contains full image reference (contains : or /)
-              if [[ "$tag" == *":"* ]] || [[ "$tag" == *"/"* ]]; then
-                # Tag is already a full image reference, use as-is
-                TAG_ARGS="$TAG_ARGS --tag ${tag}"
-              else
-                # Tag is just the tag part, prepend image base
-                TAG_ARGS="$TAG_ARGS --tag ${IMAGE_BASE}:${tag}"
-              fi
+              # Tags from metadata action are already full image references
+              TAG_ARGS="$TAG_ARGS --tag ${tag}"
             fi
           done <<< "$TAGS"
           
@@ -78,18 +71,11 @@ jobs:
       - name: Push container image
         if: github.event_name != 'pull_request'
         run: |
-          # Push all tags
+          # Push all tags (tags from metadata action are already full image references)
           TAGS="${{ steps.meta.outputs.tags }}"
-          IMAGE_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           while IFS= read -r tag; do
             if [ -n "$tag" ]; then
-              # Check if tag already contains full image reference (contains : or /)
-              if [[ "$tag" == *":"* ]] || [[ "$tag" == *"/"* ]]; then
-                # Tag is already a full image reference, use as-is
-                podman push "${tag}"
-              else
-                # Tag is just the tag part, prepend image base
-                podman push "${IMAGE_BASE}:${tag}"
-              fi
+              # Tags from metadata action are already full image references
+              podman push "${tag}"
             fi
           done <<< "$TAGS"
