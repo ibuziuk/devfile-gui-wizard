@@ -15,7 +15,7 @@ export default function WizardProgressBar() {
     <div className="mb-8">
       <div className="flex items-center mb-2 relative" style={{ minHeight: '80px' }}>
         {/* Connecting lines - positioned absolutely behind circles */}
-        <div className="absolute left-0 right-0 flex items-center justify-between" style={{ top: '0.625rem', height: '4px', paddingLeft: '1.25rem', paddingRight: '1.25rem' }}>
+        <div className="absolute left-0 right-0 flex items-center justify-between" style={{ top: '1.125rem', height: '4px', paddingLeft: '1.25rem', paddingRight: '1.25rem' }}>
           {WIZARD_STEPS.map((step, index) => {
             if (index === WIZARD_STEPS.length - 1) return null
             const isCompleted = state.completedSteps.includes(index)
