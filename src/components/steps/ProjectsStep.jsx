@@ -5,6 +5,7 @@ import FormSelect from '../forms/FormSelect'
 import FormCheckbox from '../forms/FormCheckbox'
 import ArrayFieldManager from '../forms/ArrayFieldManager'
 import WizardNavigation from '../wizard/WizardNavigation'
+import Alert from '../common/Alert'
 
 export default function ProjectsStep() {
   const { state, dispatch, actions } = useWizard()
@@ -141,9 +142,15 @@ export default function ProjectsStep() {
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">Projects</h2>
-      <p className="text-gray-600 mb-6">
+      <p className="text-gray-600 mb-4">
         Add source code repositories (Git or Zip) to clone into your workspace.
       </p>
+      
+      <div className="mb-6">
+        <Alert type="info">
+          <strong>Note:</strong> Project definition is optional. If your devfile will be located in the root of the repository, you should omit the projects section and skip this step.
+        </Alert>
+      </div>
 
       <ArrayFieldManager
         items={projects}
