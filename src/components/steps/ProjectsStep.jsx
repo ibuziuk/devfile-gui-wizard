@@ -1,164 +1,85 @@
 import { useState } from 'react'
 import { useWizard } from '../../hooks/useWizardState'
-import FormInput from '../forms/FormInput'
-import FormSelect from '../forms/FormSelect'
-import FormCheckbox from '../forms/FormCheckbox'
-import ArrayFieldManager from '../forms/ArrayFieldManager'
+import { PROJECT_KINDS } from '../../utils/constants'
+import { compareVersions } from '../../utils/validation'
 import WizardNavigation from '../wizard/WizardNavigation'
 import Alert from '../common/Alert'
+import ProjectListEditor from '../editors/ProjectListEditor'
+
+const TABS = [PROJECT_KINDS.projects, PROJECT_KINDS.starterProjects, PROJECT_KINDS.dependentProjects]
 
 export default function ProjectsStep() {
   const { state, dispatch, actions } = useWizard()
-  const projects = state.devfileData.projects
+  const [activeTab, setActiveTab] = useState('projects')
 
-  const createNewProject = () => ({
-    name: '',
-    clonePath: '',
-    sourceType: 'git',
-    git: {
-      remotes: { origin: '' },
-      checkoutFrom: { revision: '' }
-    },
-    zip: {
-      location: ''
-    }
-  })
+  const config = PROJECT_KINDS[activeTab]
+  const projects = state.devfileData[activeTab] || []
+  const supportsDependentProjects = compareVersions(state.devfileData.schemaVersion, '2.3.0') >= 0
 
-  const handleAddProject = () => {
-    dispatch({
-      type: actions.ADD_PROJECT,
-      payload: createNewProject()
-    })
-  }
-
-  const handleRemoveProject = (index) => {
-    dispatch({
-      type: actions.REMOVE_PROJECT,
-      payload: index
-    })
-  }
-
-  const handleUpdateProject = (index, field, value) => {
-    const project = projects[index]
-    let updates = {}
-
-    if (field === 'sourceType') {
-      updates = { sourceType: value }
-    } else if (field === 'name' || field === 'clonePath') {
-      updates = { [field]: value }
-    } else if (field === 'git.url') {
-      updates = {
-        git: {
-          ...project.git,
-          remotes: { origin: value }
-        }
-      }
-    } else if (field === 'git.revision') {
-      updates = {
-        git: {
-          ...project.git,
-          checkoutFrom: { revision: value }
-        }
-      }
-    } else if (field === 'zip.location') {
-      updates = {
-        zip: { location: value }
-      }
-    }
-
-    dispatch({
-      type: actions.UPDATE_PROJECT,
-      payload: { index, data: updates }
-    })
-  }
-
-  const renderProjectItem = (project, index, updateField) => {
-    return (
-      <div className="space-y-4">
-        <FormInput
-          name={`project-name-${index}`}
-          label="Project Name"
-          value={project.name || ''}
-          onChange={(e) => updateField('name', e.target.value)}
-          required
-          placeholder="my-project"
-        />
-
-        <FormInput
-          name={`project-clonePath-${index}`}
-          label="Clone Path (Optional)"
-          value={project.clonePath || ''}
-          onChange={(e) => updateField('clonePath', e.target.value)}
-          placeholder="relative/path"
-          helpText="Relative path within /projects/ directory"
-        />
-
-        <FormSelect
-          name={`project-sourceType-${index}`}
-          label="Source Type"
-          value={project.sourceType || 'git'}
-          onChange={(e) => updateField('sourceType', e.target.value)}
-          options={[
-            { value: 'git', label: 'Git Repository' },
-            { value: 'zip', label: 'Zip Archive' }
-          ]}
-        />
-
-        {project.sourceType === 'git' && (
-          <>
-            <FormInput
-              name={`project-git-url-${index}`}
-              label="Git Repository URL"
-              value={project.git?.remotes?.origin || ''}
-              onChange={(e) => updateField('git.url', e.target.value)}
-              placeholder="https://github.com/org/repo.git"
-              required
-            />
-
-            <FormInput
-              name={`project-git-revision-${index}`}
-              label="Branch/Tag/Commit (Optional)"
-              value={project.git?.checkoutFrom?.revision || ''}
-              onChange={(e) => updateField('git.revision', e.target.value)}
-              placeholder="main"
-            />
-          </>
-        )}
-
-        {project.sourceType === 'zip' && (
-          <FormInput
-            name={`project-zip-location-${index}`}
-            label="Zip Archive URL"
-            value={project.zip?.location || ''}
-            onChange={(e) => updateField('zip.location', e.target.value)}
-            placeholder="https://example.com/archive.zip"
-            required
-          />
-        )}
-      </div>
-    )
-  }
+  const setProjects = (value) =>
+    dispatch({ type: actions.SET_SECTION, payload: { section: activeTab, value } })
 
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">Projects</h2>
-      <p className="text-gray-600 mb-4">
-        Add source code repositories (Git or Zip) to clone into your workspace.
+      <p className="text-gray-600 mb-6">
+        Source code the workspace works with: the projects to clone, the starter templates offered to users,
+        and the projects the main project depends on.
       </p>
-      
-      <Alert type="info" className="mb-6">
-        <strong>Note:</strong> Project definition is optional. If the devfile is located in the root of the repository, it is recommended to omit the 'projects' section and skip this step.
-      </Alert>
 
-      <ArrayFieldManager
-        items={projects}
-        onAdd={handleAddProject}
-        onRemove={handleRemoveProject}
-        onUpdate={handleUpdateProject}
-        renderItem={renderProjectItem}
-        addButtonText="Add Project"
-        emptyMessage="No projects added. Click below to add your first project."
-      />
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex gap-6" aria-label="Project kinds">
+          {TABS.map((tab) => {
+            const count = (state.devfileData[tab.key] || []).length
+            const isActive = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`whitespace-nowrap py-2 px-1 border-b-2 text-sm font-medium
+                  ${isActive
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </div>
+
+      <p className="text-sm text-gray-600 mb-4">{config.description}</p>
+
+      {activeTab === 'projects' && (
+        <Alert type="info">
+          If the devfile sits at the root of the repository it describes, omit this section — the tool cloning
+          the devfile already knows the source.
+        </Alert>
+      )}
+
+      {activeTab === 'dependentProjects' && !supportsDependentProjects && (
+        <Alert type="warning" title="Not available in this schema version">
+          <code>dependentProjects</code> was introduced in devfile 2.3.0. Select schema version 2.3.0 in the
+          Metadata step to use it.
+        </Alert>
+      )}
+
+      <div className="mt-4">
+        <ProjectListEditor
+          projects={projects}
+          onChange={setProjects}
+          config={config}
+          idPrefix={activeTab}
+        />
+      </div>
 
       <WizardNavigation />
     </div>

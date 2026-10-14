@@ -16,26 +16,27 @@ The Devfile GUI Wizard simplifies the process of creating devfile YAML configura
 
 ## Features
 
-- ✨ **7-Step Wizard Interface** - Guided workflow through all devfile sections
+- ✨ **8-Step Wizard Interface** - Guided workflow covering every section of the devfile schema
+- 📐 **Complete 2.3.0 Schema Coverage** - Every field of the devfile 2.3.0 schema is editable, including `parent` with overrides, `dependentProjects`, image components and free-form attributes
 - 🎯 **Real-time YAML Preview** - See your devfile generated as you type
-- ✅ **Built-in Validation** - Ensures devfile 2.3.0 compliance
+- ✅ **Schema and Semantic Validation** - JSON schema constraints plus the semantic rules enforced by [devfile/api](https://github.com/devfile/api/blob/main/pkg/validation/validation-rule.md)
 - 📥 **One-Click Download** - Export your devfile.yaml instantly
 - 📋 **Copy to Clipboard** - Quick copy functionality
 - 🎨 **Responsive Design** - Works on desktop, tablet, and mobile
-- ↩️ **Edit Any Step** - Navigate back to modify previous sections
-- ⏭️ **Skip Optional Steps** - Streamlined workflow
+- ↩️ **Free Navigation** - Jump to any step at any time; every devfile section is optional
 - 🔄 **Reset Wizard** - Start fresh at any time
 - 🎭 **No Backend Required** - Fully client-side application
 
 ## Wizard Steps
 
-1. **Basic Information** - Project metadata (name, version, description, language)
-2. **Projects** - Source code repositories (Git or Zip)
-3. **Components** - Development environment containers, volumes, resources
-4. **Commands** - Build, run, test, and debug commands
-5. **Events** - Lifecycle event bindings (preStart, postStart, etc.)
-6. **Variables** - Key-value pairs for substitution
-7. **Review & Download** - Summary view with download functionality
+1. **Metadata** - schemaVersion and devfile metadata (name, version, tags, architectures, icon, attributes, ...)
+2. **Parent** - Inherit from another devfile by URI, registry id or Kubernetes DevWorkspaceTemplate, with full overrides
+3. **Projects** - Projects, starter projects and dependent projects (Git or Zip sources)
+4. **Components** - container, kubernetes, openshift, volume and image components
+5. **Commands** - exec, apply and composite commands with groups and defaults
+6. **Events** - preStart, postStart, preStop and postStop bindings, ordered and type-checked
+7. **Variables & Attributes** - Substitution variables and free-form devfile attributes
+8. **Review & Download** - Validation report, summary and download
 
 ## Getting Started
 
@@ -72,6 +73,12 @@ The Devfile GUI Wizard simplifies the process of creating devfile YAML configura
 | `npm run dev` | Start development server (with hot reload) |
 | `npm run build` | Build for production |
 | `npm run preview` | Preview production build locally |
+| `npm test` | Run the generator and validation test suites |
+| `npm run test:watch` | Run the tests in watch mode |
+
+The test suite validates generated devfiles against the official devfile 2.3.0 JSON schema
+(vendored in `schemas/devfile-2.3.0.json`) with [ajv](https://ajv.js.org/), and covers every
+semantic rule the wizard enforces.
 
 ## OpenShift Deployment
 
@@ -178,8 +185,9 @@ kubectl delete -k openshift
 devfile-gui-wizard/
 ├── src/
 │   ├── components/
-│   │   ├── common/          # Reusable UI components (Button, Card, Alert)
-│   │   ├── forms/           # Form components (Input, Select, TextArea)
+│   │   ├── common/          # Reusable UI components (Button, Card, Alert, Badge)
+│   │   ├── forms/           # Form primitives (Input, Select, Boolean, lists, attributes)
+│   │   ├── editors/         # Schema editors reused by steps and parent overrides
 │   │   ├── wizard/          # Wizard navigation and container
 │   │   ├── steps/           # Individual wizard step components
 │   │   └── preview/         # YAML preview component
@@ -187,13 +195,15 @@ devfile-gui-wizard/
 │   │   ├── useWizardState.jsx    # State management
 │   │   └── useYamlGenerator.jsx  # YAML generation
 │   ├── utils/               # Utility functions
-│   │   ├── devfileGenerator.js   # Devfile cleaning/validation
-│   │   ├── validation.js         # Form validation rules
+│   │   ├── devfileGenerator.js   # Wizard state -> devfile object/YAML
+│   │   ├── validation.js         # Schema and semantic validation
 │   │   ├── downloadFile.js       # File download utility
-│   │   └── constants.js          # App constants
+│   │   └── constants.js          # Schema enums, patterns and entry factories
 │   ├── App.jsx              # Root component
 │   ├── main.jsx             # Application entry point
 │   └── index.css            # Global styles
+├── schemas/                 # Vendored devfile 2.3.0 JSON schema (used by tests)
+├── tests/                   # Vitest suites for the generator and validation
 ├── public/                  # Static assets
 ├── index.html               # HTML entry point
 ├── package.json             # Dependencies and scripts
@@ -216,21 +226,40 @@ devfile-gui-wizard/
 
 ## Devfile 2.3.0 Support
 
-This wizard supports all major devfile 2.3.0 features:
+Every field of the devfile 2.3.0 schema is editable. See [SCHEMA_COVERAGE.md](SCHEMA_COVERAGE.md)
+for the field-by-field matrix.
 
-- **Metadata**: name, version, displayName, description, language, provider, tags, website, supportUrl
-- **Projects**: Git and Zip sources with checkoutFrom options
-- **Components**:
-  - Container (with image, env vars, volume mounts, endpoints, resource limits)
-  - Volume (with size and ephemeral options)
-  - Kubernetes/OpenShift resources
-  - Image builds
-- **Commands**:
-  - Exec (command execution)
-  - Apply (resource application)
-  - Composite (command grouping)
-- **Events**: preStart, postStart, preStop, postStop
-- **Variables**: String substitution with `{{variable}}` syntax
+- **schemaVersion**: 2.0.0 through 2.3.0
+- **metadata**: name, version, displayName, description, tags, icon, globalMemoryLimit, projectType,
+  language, website, provider, supportUrl, architectures, attributes
+- **parent**: by `uri`, registry `id` (+ `registryUrl`) or `kubernetes` DevWorkspaceTemplate, with a
+  `version` and overrides for attributes, components, commands, projects, starterProjects,
+  dependentProjects and variables
+- **projects / starterProjects / dependentProjects**: Git (multiple remotes, `checkoutFrom`) and Zip
+  sources, `clonePath`, `description`, `subDir`, attributes
+- **components**:
+  - `container`: image, command, args, env, memory/cpu request and limit, mountSources,
+    sourceMapping, dedicatedPod, volumeMounts, endpoints, deployment and service annotations
+  - `kubernetes` / `openshift`: `uri` or `inlined` manifest, deployByDefault, endpoints
+  - `volume`: size, ephemeral
+  - `image`: imageName, autoBuild and a Dockerfile from a URI, a devfile registry or a Git repository
+    (buildContext, rootRequired, build args)
+  - `endpoints`: name, targetPort, protocol, exposure, path, secure, annotations, attributes
+- **commands**: `exec` (commandLine, component, workingDir, env, label, hotReloadCapable),
+  `apply` (component, label) and `composite` (ordered sub-commands, parallel), each with a
+  `group` of kind build/run/test/debug/deploy and an `isDefault` flag
+- **events**: preStart, postStart, preStop, postStop — ordered, with the apply/exec rules enforced
+- **variables**: string substitution with `{{variable}}` syntax
+- **attributes**: free-form YAML on the devfile, metadata, components, commands, projects and endpoints
+
+### Validation
+
+Beyond the JSON schema, the wizard enforces the semantic rules from
+[devfile/api validation](https://github.com/devfile/api/blob/main/pkg/validation/validation-rule.md):
+unique names and ids, endpoint name and port uniqueness, reserved `PROJECT_SOURCE`/`PROJECTS_ROOT`
+env names, volume mount references, resource request/limit ordering, annotation conflicts, command
+component kinds, composite command cycles, one default command per group kind, event command kinds,
+and the git remote/checkout rules for projects and starter projects.
 
 ## Contributing
 

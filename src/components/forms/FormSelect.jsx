@@ -27,7 +27,8 @@ export default function FormSelect({
           }
         `}
       >
-        <option value="">{placeholder}</option>
+        {/* An empty placeholder means the field always has a value (type pickers). */}
+        {placeholder !== '' && <option value="">{placeholder}</option>}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

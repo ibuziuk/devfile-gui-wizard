@@ -1,19 +1,9 @@
-import yaml from 'js-yaml'
-import { cleanDevfileData } from '../utils/devfileGenerator'
+import { useCallback } from 'react'
+import { buildDevfile, generateYaml as dumpYaml } from '../utils/devfileGenerator'
 
 export function useYamlGenerator() {
-  const generateYaml = (devfileData) => {
-    const cleaned = cleanDevfileData(devfileData)
+  const generateYaml = useCallback((devfileData) => dumpYaml(devfileData), [])
+  const generateObject = useCallback((devfileData) => buildDevfile(devfileData), [])
 
-    const yamlString = yaml.dump(cleaned, {
-      indent: 2,
-      lineWidth: 80,
-      noRefs: true,
-      sortKeys: false
-    })
-
-    return yamlString
-  }
-
-  return { generateYaml }
+  return { generateYaml, generateObject }
 }

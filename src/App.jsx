@@ -12,7 +12,8 @@ function App() {
               Devfile Wizard
             </h1>
             <p className="mt-2 text-gray-600">
-              Create devfile 2.3.0 configuration files step-by-step
+              Create devfile 2.3.0 configuration files step-by-step — full schema coverage, validated
+              as you type
             </p>
           </div>
         </header>

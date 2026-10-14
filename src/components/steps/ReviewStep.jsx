@@ -1,8 +1,7 @@
 import { useWizard } from '../../hooks/useWizardState'
 import { useYamlGenerator } from '../../hooks/useYamlGenerator'
 import { downloadYamlFile } from '../../utils/downloadFile'
-import { validateDevfile } from '../../utils/devfileGenerator'
-import { WIZARD_STEPS } from '../../utils/constants'
+import { validateDevfile } from '../../utils/validation'
 import Button from '../common/Button'
 import Card from '../common/Card'
 import Badge from '../common/Badge'
@@ -12,174 +11,178 @@ import YamlPreview from '../preview/YamlPreview'
 export default function ReviewStep() {
   const { state, dispatch, actions } = useWizard()
   const { generateYaml } = useYamlGenerator()
+  const data = state.devfileData
 
-  const metadata = state.devfileData.metadata
-  const projects = state.devfileData.projects
-  const components = state.devfileData.components
-  const commands = state.devfileData.commands
-  const events = state.devfileData.events
-  const variables = state.devfileData.variables
+  const { errors, warnings } = validateDevfile(data)
 
-  const validationErrors = validateDevfile(state.devfileData)
-
-  const handleDownload = () => {
-    const yamlContent = generateYaml(state.devfileData)
-    downloadYamlFile(yamlContent, 'devfile.yaml')
-  }
+  const handleDownload = () => downloadYamlFile(generateYaml(data), 'devfile.yaml')
 
   const handleReset = () => {
-    if (window.confirm('Are you sure you want to reset the wizard? All data will be lost.')) {
+    if (window.confirm('Reset the wizard? All data will be lost.')) {
       dispatch({ type: actions.RESET_WIZARD })
     }
   }
 
-  const handleEdit = (stepIndex) => {
-    dispatch({ type: actions.GOTO_STEP, payload: stepIndex })
-  }
+  const goTo = (stepIndex) => dispatch({ type: actions.GOTO_STEP, payload: stepIndex })
 
-  const renderSummarySection = (title, stepIndex, hasContent, children) => {
-    return (
-      <Card className="mb-4">
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-            {hasContent ? (
-              <Badge variant="success" className="mt-1">Configured</Badge>
-            ) : (
-              <Badge variant="default" className="mt-1">Not configured</Badge>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => handleEdit(stepIndex)}
-            className="text-xs px-2 py-1"
-          >
-            Edit
-          </Button>
-        </div>
-        {children}
-      </Card>
-    )
-  }
+  const countsByType = (items, field) =>
+    items.reduce((acc, item) => {
+      const key = item[field] || 'unknown'
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+
+  const componentCounts = countsByType(data.components, 'componentType')
+  const commandCounts = countsByType(data.commands, 'commandType')
+  const eventCount = Object.values(data.events).reduce((total, list) => total + list.length, 0)
+
+  const sections = [
+    {
+      title: 'Metadata',
+      step: 0,
+      configured: !!(data.metadata.name || data.metadata.displayName),
+      details: [
+        data.metadata.name && `name: ${data.metadata.name}`,
+        data.metadata.version && `version: ${data.metadata.version}`,
+        data.metadata.language && `language: ${data.metadata.language}`,
+        `schemaVersion: ${data.schemaVersion}`
+      ].filter(Boolean)
+    },
+    {
+      title: 'Parent',
+      step: 1,
+      configured: !!data.parent?.enabled,
+      details: data.parent?.enabled
+        ? [
+            `${data.parent.sourceType}: ${
+              data.parent.sourceType === 'kubernetes'
+                ? data.parent.kubernetes?.name || '—'
+                : data.parent[data.parent.sourceType] || '—'
+            }`,
+            data.parent.version && `version: ${data.parent.version}`
+          ].filter(Boolean)
+        : ['No parent devfile']
+    },
+    {
+      title: 'Projects',
+      step: 2,
+      configured:
+        data.projects.length + data.starterProjects.length + data.dependentProjects.length > 0,
+      details: [
+        `${data.projects.length} project(s)`,
+        `${data.starterProjects.length} starter project(s)`,
+        `${data.dependentProjects.length} dependent project(s)`
+      ]
+    },
+    {
+      title: 'Components',
+      step: 3,
+      configured: data.components.length > 0,
+      details:
+        data.components.length > 0
+          ? Object.entries(componentCounts).map(([type, count]) => `${count} × ${type}`)
+          : ['No components']
+    },
+    {
+      title: 'Commands',
+      step: 4,
+      configured: data.commands.length > 0,
+      details:
+        data.commands.length > 0
+          ? Object.entries(commandCounts).map(([type, count]) => `${count} × ${type}`)
+          : ['No commands']
+    },
+    {
+      title: 'Events',
+      step: 5,
+      configured: eventCount > 0,
+      details:
+        eventCount > 0
+          ? Object.entries(data.events)
+              .filter(([, list]) => list.length > 0)
+              .map(([type, list]) => `${type}: ${list.join(', ')}`)
+          : ['No events bound']
+    },
+    {
+      title: 'Variables & attributes',
+      step: 6,
+      configured: data.variables.length > 0 || !!data.attributes,
+      details: [
+        `${data.variables.length} variable(s)`,
+        data.attributes ? 'devfile attributes set' : 'no devfile attributes'
+      ]
+    }
+  ]
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Review & Download</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Review & download</h2>
       <p className="text-gray-600 mb-6">
-        Review your devfile configuration and download the YAML file.
+        The devfile is validated against the devfile {data.schemaVersion} schema and the devfile/api semantic
+        rules.
       </p>
 
-      {validationErrors.length > 0 && (
-        <Alert type="error" title="Validation Errors">
+      {errors.length === 0 && warnings.length === 0 && (
+        <Alert type="success" title="Valid devfile">
+          No schema or semantic problems found.
+        </Alert>
+      )}
+
+      {errors.length > 0 && (
+        <Alert type="error" title={`${errors.length} error${errors.length === 1 ? '' : 's'}`}>
           <ul className="list-disc list-inside space-y-1">
-            {validationErrors.map((error, index) => (
+            {errors.map((error, index) => (
               <li key={index}>{error}</li>
             ))}
           </ul>
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div>
-          {renderSummarySection(
-            'Basic Information',
-            0,
-            metadata.name !== '',
-            <div className="text-sm space-y-1">
-              {metadata.name && <p><strong>Name:</strong> {metadata.name}</p>}
-              {metadata.version && <p><strong>Version:</strong> {metadata.version}</p>}
-              {metadata.displayName && <p><strong>Display Name:</strong> {metadata.displayName}</p>}
-              {metadata.language && <p><strong>Language:</strong> {metadata.language}</p>}
-            </div>
-          )}
-
-          {renderSummarySection(
-            'Projects',
-            1,
-            projects.length > 0,
-            <div className="text-sm">
-              {projects.length > 0 ? (
-                <p>{projects.length} project(s) configured</p>
-              ) : (
-                <p className="text-gray-500">No projects added</p>
-              )}
-            </div>
-          )}
-
-          {renderSummarySection(
-            'Components',
-            2,
-            components.length > 0,
-            <div className="text-sm">
-              {components.length > 0 ? (
-                <p>{components.length} component(s) configured</p>
-              ) : (
-                <p className="text-gray-500">No components added</p>
-              )}
-            </div>
-          )}
+      {warnings.length > 0 && (
+        <div className="mt-4">
+          <Alert type="warning" title={`${warnings.length} warning${warnings.length === 1 ? '' : 's'}`}>
+            <ul className="list-disc list-inside space-y-1">
+              {warnings.map((warning, index) => (
+                <li key={index}>{warning}</li>
+              ))}
+            </ul>
+          </Alert>
         </div>
+      )}
 
-        <div>
-          {renderSummarySection(
-            'Commands',
-            3,
-            commands.length > 0,
-            <div className="text-sm">
-              {commands.length > 0 ? (
-                <p>{commands.length} command(s) configured</p>
-              ) : (
-                <p className="text-gray-500">No commands added</p>
-              )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 my-6">
+        {sections.map((section) => (
+          <Card key={section.title}>
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{section.title}</h3>
+                <Badge variant={section.configured ? 'success' : 'default'} className="mt-1">
+                  {section.configured ? 'Configured' : 'Not configured'}
+                </Badge>
+              </div>
+              <Button variant="outline" onClick={() => goTo(section.step)} className="text-xs px-2 py-1">
+                Edit
+              </Button>
             </div>
-          )}
-
-          {renderSummarySection(
-            'Events',
-            4,
-            Object.values(events).some(arr => arr.length > 0),
-            <div className="text-sm space-y-1">
-              {events.preStart?.length > 0 && <p><strong>Pre Start:</strong> {events.preStart.length} command(s)</p>}
-              {events.postStart?.length > 0 && <p><strong>Post Start:</strong> {events.postStart.length} command(s)</p>}
-              {events.preStop?.length > 0 && <p><strong>Pre Stop:</strong> {events.preStop.length} command(s)</p>}
-              {events.postStop?.length > 0 && <p><strong>Post Stop:</strong> {events.postStop.length} command(s)</p>}
-              {!Object.values(events).some(arr => arr.length > 0) && (
-                <p className="text-gray-500">No events configured</p>
-              )}
-            </div>
-          )}
-
-          {renderSummarySection(
-            'Variables',
-            5,
-            Object.keys(variables).length > 0,
-            <div className="text-sm">
-              {Object.keys(variables).length > 0 ? (
-                <p>{Object.keys(variables).length} variable(s) defined</p>
-              ) : (
-                <p className="text-gray-500">No variables defined</p>
-              )}
-            </div>
-          )}
-        </div>
+            <ul className="text-sm text-gray-600 space-y-1">
+              {section.details.map((detail, index) => (
+                <li key={index} className="truncate" title={detail}>
+                  {detail}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ))}
       </div>
 
       <YamlPreview />
 
       <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-        <Button
-          variant="secondary"
-          onClick={handleReset}
-        >
-          Reset Wizard
+        <Button variant="secondary" onClick={handleReset}>
+          Reset wizard
         </Button>
 
-        <Button
-          variant="success"
-          onClick={handleDownload}
-          disabled={validationErrors.length > 0}
-          className="px-6"
-        >
+        <Button variant="success" onClick={handleDownload} disabled={errors.length > 0} className="px-6">
           Download devfile.yaml
         </Button>
       </div>

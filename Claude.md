@@ -22,12 +22,35 @@ The application is stateless - all devfile generation happens client-side with n
 
 ## Development Commands
 
-This section will be populated once the project structure is initialized. Expected commands include:
 - `npm install` - Install dependencies
-- `npm run dev` - Start development server
+- `npm run dev` - Start development server (Vite, http://localhost:5173)
 - `npm run build` - Build for production
-- `npm run lint` - Run linter
-- `npm run test` - Run tests (if applicable)
+- `npm run preview` - Preview the production build
+- `npm test` - Run the Vitest suites (generator + validation)
+- `npm run test:watch` - Run the tests in watch mode
+
+There is no linter configured.
+
+## Code Layout
+
+- `src/utils/constants.js` - schema enums, regex patterns and factories for new wizard entries
+- `src/utils/devfileGenerator.js` - converts the wizard's UI-shaped state into a devfile object/YAML
+- `src/utils/validation.js` - JSON schema constraints plus devfile/api semantic rules
+- `src/components/editors/` - schema editors (components, commands, projects, endpoints, git sources)
+  reused both by the wizard steps and by the `parent` override editors
+- `schemas/devfile-2.3.0.json` - vendored official schema; the tests validate generated output
+  against it with ajv
+
+### Wizard state conventions
+
+The wizard keeps a UI-shaped mirror of the devfile, converted on generation:
+
+- optional booleans are tri-state (`''` = not set, `true`, `false`) so an explicit `false` is
+  distinguishable from an omitted field
+- string maps (`variables`, `git.remotes`, annotations, `env`) are ordered `{name, value}` arrays
+- free-form `attributes` maps are YAML text
+- polymorphic entries carry a discriminator (`componentType`, `commandType`, `sourceType`) that is
+  stripped when the devfile is generated - it must never appear in the output
 
 ## MCP Servers
 

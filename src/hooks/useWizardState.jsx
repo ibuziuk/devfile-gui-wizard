@@ -1,25 +1,42 @@
-import { createContext, useContext, useReducer } from 'react'
+import { createContext, useContext, useMemo, useReducer } from 'react'
+import { DEFAULT_SCHEMA_VERSION, WIZARD_STEPS, newParent } from '../utils/constants'
 
 const WizardContext = createContext()
 
+/**
+ * The wizard keeps a UI-shaped mirror of the devfile:
+ *  - string maps (variables, remotes, annotations) are ordered {name, value} arrays
+ *  - optional booleans are tri-state ('' = not set, true, false)
+ *  - free-form `attributes` maps are YAML text
+ *  - each polymorphic entry carries a discriminator (componentType, commandType,
+ *    sourceType) that is stripped when the devfile is generated
+ */
 const initialState = {
   currentStep: 0,
   completedSteps: [],
   devfileData: {
-    schemaVersion: '2.3.0',
+    schemaVersion: DEFAULT_SCHEMA_VERSION,
     metadata: {
       name: '',
       version: '',
       displayName: '',
       description: '',
-      language: '',
-      projectType: '',
-      provider: '',
       tags: [],
+      icon: '',
+      globalMemoryLimit: '',
+      projectType: '',
+      language: '',
       website: '',
-      supportUrl: ''
+      provider: '',
+      supportUrl: '',
+      architectures: [],
+      attributes: ''
     },
+    attributes: '',
+    parent: newParent(),
     projects: [],
+    starterProjects: [],
+    dependentProjects: [],
     components: [],
     commands: [],
     events: {
@@ -28,32 +45,20 @@ const initialState = {
       preStop: [],
       postStop: []
     },
-    variables: {},
-    starterProjects: [],
-    attributes: {}
-  },
-  validationErrors: {}
+    variables: []
+  }
 }
 
 const WIZARD_ACTIONS = {
   NEXT_STEP: 'NEXT_STEP',
   PREV_STEP: 'PREV_STEP',
   GOTO_STEP: 'GOTO_STEP',
+  MARK_STEP_COMPLETED: 'MARK_STEP_COMPLETED',
   UPDATE_METADATA: 'UPDATE_METADATA',
-  ADD_PROJECT: 'ADD_PROJECT',
-  REMOVE_PROJECT: 'REMOVE_PROJECT',
-  UPDATE_PROJECT: 'UPDATE_PROJECT',
-  ADD_COMPONENT: 'ADD_COMPONENT',
-  REMOVE_COMPONENT: 'REMOVE_COMPONENT',
-  UPDATE_COMPONENT: 'UPDATE_COMPONENT',
-  ADD_COMMAND: 'ADD_COMMAND',
-  REMOVE_COMMAND: 'REMOVE_COMMAND',
-  UPDATE_COMMAND: 'UPDATE_COMMAND',
   UPDATE_EVENTS: 'UPDATE_EVENTS',
-  UPDATE_VARIABLES: 'UPDATE_VARIABLES',
-  SET_VALIDATION_ERRORS: 'SET_VALIDATION_ERRORS',
-  RESET_WIZARD: 'RESET_WIZARD',
-  MARK_STEP_COMPLETED: 'MARK_STEP_COMPLETED'
+  SET_SECTION: 'SET_SECTION',
+  LOAD_DEVFILE: 'LOAD_DEVFILE',
+  RESET_WIZARD: 'RESET_WIZARD'
 }
 
 function wizardReducer(state, action) {
@@ -61,130 +66,25 @@ function wizardReducer(state, action) {
     case WIZARD_ACTIONS.NEXT_STEP:
       return {
         ...state,
-        currentStep: Math.min(state.currentStep + 1, 6),
+        currentStep: Math.min(state.currentStep + 1, WIZARD_STEPS.length - 1),
         completedSteps: [...new Set([...state.completedSteps, state.currentStep])]
       }
 
     case WIZARD_ACTIONS.PREV_STEP:
-      return {
-        ...state,
-        currentStep: Math.max(state.currentStep - 1, 0)
-      }
+      return { ...state, currentStep: Math.max(state.currentStep - 1, 0) }
 
     case WIZARD_ACTIONS.GOTO_STEP:
-      return {
-        ...state,
-        currentStep: action.payload
-      }
+      return { ...state, currentStep: action.payload }
 
     case WIZARD_ACTIONS.MARK_STEP_COMPLETED:
-      return {
-        ...state,
-        completedSteps: [...new Set([...state.completedSteps, action.payload])]
-      }
+      return { ...state, completedSteps: [...new Set([...state.completedSteps, action.payload])] }
 
     case WIZARD_ACTIONS.UPDATE_METADATA:
       return {
         ...state,
         devfileData: {
           ...state.devfileData,
-          metadata: {
-            ...state.devfileData.metadata,
-            ...action.payload
-          }
-        }
-      }
-
-    case WIZARD_ACTIONS.ADD_PROJECT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          projects: [...state.devfileData.projects, action.payload]
-        }
-      }
-
-    case WIZARD_ACTIONS.REMOVE_PROJECT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          projects: state.devfileData.projects.filter((_, index) => index !== action.payload)
-        }
-      }
-
-    case WIZARD_ACTIONS.UPDATE_PROJECT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          projects: state.devfileData.projects.map((project, index) =>
-            index === action.payload.index
-              ? { ...project, ...action.payload.data }
-              : project
-          )
-        }
-      }
-
-    case WIZARD_ACTIONS.ADD_COMPONENT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          components: [...state.devfileData.components, action.payload]
-        }
-      }
-
-    case WIZARD_ACTIONS.REMOVE_COMPONENT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          components: state.devfileData.components.filter((_, index) => index !== action.payload)
-        }
-      }
-
-    case WIZARD_ACTIONS.UPDATE_COMPONENT:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          components: state.devfileData.components.map((component, index) =>
-            index === action.payload.index
-              ? { ...component, ...action.payload.data }
-              : component
-          )
-        }
-      }
-
-    case WIZARD_ACTIONS.ADD_COMMAND:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          commands: [...state.devfileData.commands, action.payload]
-        }
-      }
-
-    case WIZARD_ACTIONS.REMOVE_COMMAND:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          commands: state.devfileData.commands.filter((_, index) => index !== action.payload)
-        }
-      }
-
-    case WIZARD_ACTIONS.UPDATE_COMMAND:
-      return {
-        ...state,
-        devfileData: {
-          ...state.devfileData,
-          commands: state.devfileData.commands.map((command, index) =>
-            index === action.payload.index
-              ? { ...command, ...action.payload.data }
-              : command
-          )
+          metadata: { ...state.devfileData.metadata, ...action.payload }
         }
       }
 
@@ -193,30 +93,34 @@ function wizardReducer(state, action) {
         ...state,
         devfileData: {
           ...state.devfileData,
-          events: {
-            ...state.devfileData.events,
-            ...action.payload
-          }
+          events: { ...state.devfileData.events, ...action.payload }
         }
       }
 
-    case WIZARD_ACTIONS.UPDATE_VARIABLES:
+    // Replaces a whole top-level section (components, commands, parent, ...).
+    // The value may be an updater function so that several updates batched into
+    // one event still build on each other.
+    case WIZARD_ACTIONS.SET_SECTION: {
+      const { section, value } = action.payload
       return {
         ...state,
         devfileData: {
           ...state.devfileData,
-          variables: action.payload
+          [section]: typeof value === 'function' ? value(state.devfileData[section]) : value
         }
       }
+    }
 
-    case WIZARD_ACTIONS.SET_VALIDATION_ERRORS:
+    case WIZARD_ACTIONS.LOAD_DEVFILE:
       return {
         ...state,
-        validationErrors: action.payload
+        currentStep: 0,
+        completedSteps: [],
+        devfileData: action.payload
       }
 
     case WIZARD_ACTIONS.RESET_WIZARD:
-      return initialState
+      return JSON.parse(JSON.stringify(initialState))
 
     default:
       return state
@@ -224,13 +128,11 @@ function wizardReducer(state, action) {
 }
 
 export function WizardProvider({ children }) {
-  const [state, dispatch] = useReducer(wizardReducer, initialState)
+  const [state, dispatch] = useReducer(wizardReducer, JSON.parse(JSON.stringify(initialState)))
 
-  return (
-    <WizardContext.Provider value={{ state, dispatch, actions: WIZARD_ACTIONS }}>
-      {children}
-    </WizardContext.Provider>
-  )
+  const value = useMemo(() => ({ state, dispatch, actions: WIZARD_ACTIONS }), [state])
+
+  return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>
 }
 
 export function useWizard() {
@@ -240,3 +142,16 @@ export function useWizard() {
   }
   return context
 }
+
+/**
+ * Convenience hook for sections that are edited as a whole (arrays/objects).
+ * `setValue` accepts either the next value or an updater function.
+ */
+export function useSection(section) {
+  const { state, dispatch, actions } = useWizard()
+  const value = state.devfileData[section]
+  const setValue = (next) => dispatch({ type: actions.SET_SECTION, payload: { section, value: next } })
+  return [value, setValue]
+}
+
+export { initialState as initialWizardState }

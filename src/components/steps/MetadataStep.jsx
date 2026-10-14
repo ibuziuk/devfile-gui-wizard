@@ -1,75 +1,65 @@
-import { useState, useEffect } from 'react'
 import { useWizard } from '../../hooks/useWizardState'
-import { validateMetadata } from '../../utils/validation'
-import { LANGUAGES, PROJECT_TYPES } from '../../utils/constants'
+import { validateMetadata, validators } from '../../utils/validation'
+import { ARCHITECTURES, LANGUAGES, PROJECT_TYPES, SCHEMA_VERSIONS } from '../../utils/constants'
 import FormInput from '../forms/FormInput'
 import FormTextarea from '../forms/FormTextarea'
 import FormSelect from '../forms/FormSelect'
 import FormSection from '../forms/FormSection'
+import StringListManager from '../forms/StringListManager'
+import AttributesEditor from '../forms/AttributesEditor'
+import CollapsibleSection from '../forms/CollapsibleSection'
 import WizardNavigation from '../wizard/WizardNavigation'
-import Alert from '../common/Alert'
 
 export default function MetadataStep() {
   const { state, dispatch, actions } = useWizard()
-  const [errors, setErrors] = useState({})
-  const [tags, setTags] = useState(state.devfileData.metadata.tags?.join(', ') || '')
+  const { metadata, schemaVersion } = state.devfileData
+  const errors = validateMetadata(metadata)
 
-  const metadata = state.devfileData.metadata
+  const setMetadata = (payload) => dispatch({ type: actions.UPDATE_METADATA, payload })
+  const handleChange = (event) => setMetadata({ [event.target.name]: event.target.value })
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    dispatch({
-      type: actions.UPDATE_METADATA,
-      payload: { [name]: value }
+  const toggleArchitecture = (architecture, checked) => {
+    const current = metadata.architectures || []
+    setMetadata({
+      architectures: checked
+        ? [...current, architecture]
+        : current.filter((item) => item !== architecture)
     })
   }
-
-  const handleTagsChange = (e) => {
-    const value = e.target.value
-    setTags(value)
-    const tagsArray = value.split(',').map(t => t.trim()).filter(Boolean)
-    dispatch({
-      type: actions.UPDATE_METADATA,
-      payload: { tags: tagsArray }
-    })
-  }
-
-  const handleNext = () => {
-    const validationErrors = validateMetadata(metadata)
-    setErrors(validationErrors)
-
-    if (Object.keys(validationErrors).length > 0) {
-      return false
-    }
-
-    return true
-  }
-
-  const canProceed = metadata.name && metadata.name.trim() !== ''
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">Basic Information</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">Metadata</h2>
       <p className="text-gray-600 mb-6">
-        Enter the basic metadata for your devfile. The name field is required.
+        Information about the devfile itself. Everything here is optional per the schema, but registries and
+        tools rely on <code className="bg-gray-100 px-1 rounded">name</code> and{' '}
+        <code className="bg-gray-100 px-1 rounded">version</code>.
       </p>
 
-      {Object.keys(errors).length > 0 && (
-        <Alert type="error" title="Validation Errors">
-          Please fix the errors below before continuing.
-        </Alert>
-      )}
+      <FormSection title="Devfile">
+        <FormSelect
+          name="schemaVersion"
+          label="Schema version"
+          value={schemaVersion}
+          onChange={(event) =>
+            dispatch({ type: actions.SET_SECTION, payload: { section: 'schemaVersion', value: event.target.value } })
+          }
+          options={SCHEMA_VERSIONS}
+          required
+          placeholder=""
+          helpText="The version of the devfile schema this file conforms to."
+        />
+      </FormSection>
 
-      <FormSection title="Required Information">
+      <FormSection title="Identity">
         <FormInput
           name="name"
           label="Name"
           value={metadata.name}
           onChange={handleChange}
           error={errors.name}
-          required
           placeholder="my-project"
-          helpText="Lowercase alphanumeric with hyphens only (max 63 chars)"
+          helpText="Lowercase alphanumeric characters and '-', max 63 characters."
         />
 
         <FormInput
@@ -77,19 +67,18 @@ export default function MetadataStep() {
           label="Version"
           value={metadata.version}
           onChange={handleChange}
+          error={errors.version}
           placeholder="1.0.0"
-          helpText="Semantic version of your project"
+          helpText="Semantic version of this devfile stack."
         />
-      </FormSection>
 
-      <FormSection title="Optional Information">
         <FormInput
           name="displayName"
-          label="Display Name"
+          label="Display name"
           value={metadata.displayName}
           onChange={handleChange}
           placeholder="My Awesome Project"
-          helpText="Human-readable name"
+          helpText="Human readable name shown in registries and IDEs."
         />
 
         <FormTextarea
@@ -97,42 +86,69 @@ export default function MetadataStep() {
           label="Description"
           value={metadata.description}
           onChange={handleChange}
-          placeholder="A brief description of your project"
           rows={3}
+          placeholder="A brief description of the stack"
         />
+      </FormSection>
 
+      <FormSection title="Classification">
         <FormSelect
           name="language"
-          label="Primary Language"
+          label="Language"
           value={metadata.language}
           onChange={handleChange}
           options={LANGUAGES}
+          helpText="Primary language of the project. Any value is allowed."
         />
 
         <FormSelect
           name="projectType"
-          label="Project Type"
+          label="Project type"
           value={metadata.projectType}
           onChange={handleChange}
           options={PROJECT_TYPES}
+          helpText="Framework or runtime the stack targets. Any value is allowed."
         />
 
+        <StringListManager
+          label="Tags"
+          items={metadata.tags || []}
+          onChange={(value) => setMetadata({ tags: value })}
+          placeholder="Node.js"
+          addButtonText="Add tag"
+          emptyMessage="No tags defined."
+          helpText="Keywords used to categorise the stack in a registry."
+        />
+
+        <fieldset className="mb-4">
+          <legend className="block text-sm font-medium text-gray-700 mb-1">Architectures</legend>
+          <p className="mb-2 text-sm text-gray-500">
+            CPU architectures the stack supports. Leaving this empty means all architectures.
+          </p>
+          <div className="flex flex-wrap gap-4">
+            {ARCHITECTURES.map((architecture) => (
+              <label key={architecture} className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={(metadata.architectures || []).includes(architecture)}
+                  onChange={(event) => toggleArchitecture(architecture, event.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700 font-mono">{architecture}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </FormSection>
+
+      <FormSection title="Provider and links">
         <FormInput
           name="provider"
           label="Provider"
           value={metadata.provider}
           onChange={handleChange}
-          placeholder="Organization or Author"
-          helpText="The organization or individual providing this devfile"
-        />
-
-        <FormInput
-          name="tags"
-          label="Tags"
-          value={tags}
-          onChange={handleTagsChange}
-          placeholder="web, api, backend"
-          helpText="Comma-separated tags for categorization"
+          placeholder="Red Hat"
+          helpText="Organization or individual providing this devfile."
         />
 
         <FormInput
@@ -154,9 +170,40 @@ export default function MetadataStep() {
           error={errors.supportUrl}
           placeholder="https://example.com/support"
         />
+
+        <FormInput
+          name="icon"
+          label="Icon"
+          value={metadata.icon}
+          onChange={handleChange}
+          error={errors.icon}
+          placeholder="https://example.com/icon.svg"
+          helpText="URL or relative path of the stack icon."
+        />
       </FormSection>
 
-      <WizardNavigation onNext={handleNext} canProceed={canProceed} />
+      <CollapsibleSection
+        title="Advanced metadata"
+        badge={(metadata.globalMemoryLimit ? 1 : 0) + (metadata.attributes ? 1 : 0)}
+      >
+        <FormInput
+          name="globalMemoryLimit"
+          label="Global memory limit"
+          value={metadata.globalMemoryLimit}
+          onChange={handleChange}
+          error={errors.globalMemoryLimit || validators.quantity(metadata.globalMemoryLimit)}
+          placeholder="2674Mi"
+          helpText="Total memory limit applied to all the containers of the workspace."
+        />
+        <AttributesEditor
+          name="metadata-attributes"
+          label="Metadata attributes"
+          value={metadata.attributes}
+          onChange={(value) => setMetadata({ attributes: value })}
+        />
+      </CollapsibleSection>
+
+      <WizardNavigation />
     </div>
   )
 }
